@@ -1,7 +1,5 @@
 package example
 
-import java.lang.Long
-import java.sql.Timestamp
 import java.time.Instant
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -10,22 +8,22 @@ import org.apache.kafka.common.serialization._
 import org.apache.kafka.streams._
 import org.apache.kafka.streams.kstream._
 
-import scala.collection.JavaConverters._
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.serialization.Serdes.StringSerde
 
 import scala.collection.mutable
-import scala.jav
 
 class BatchInitializer extends Initializer[Batch] {
   override def apply(): Batch = new Batch()
 }
 
 class Batch {
-  val foo = mutable.ArrayBuffer[String]()
+  private val _foo: mutable.ArrayBuffer[String] = mutable.ArrayBuffer[String]()
 
-  def add(s: String) = {
-    foo += s
+  val foo: String = _foo.reduce(_ + _)
+
+  def add(s: String): Batch = {
+    _foo += s
     this
   }
 }
@@ -41,22 +39,18 @@ object Hello extends Greeting with App {
     p
   }
 
-  val i1: Initializer[String] =  () => ""
-  val ag1: Aggregator[String, String, String] = (k, v, va) => va + v
-  val kv: KeyValueMapper[Windowed[String], String, String] = (k, v) => k.window().start()
+  val i1: Initializer[String]                                     = () => ""
+  val aggregator: Aggregator[String, String, String]              = (k, v, va) => va.concat(" | ").concat(v)
+  val keyMapper: KeyValueMapper[Windowed[String], String, String] = (k, v) => k.key() // we don't want to change the key
+  val valueMapper: ValueMapper[String, String]                    = (v) => v
 
-
-  val builder: KStreamBuilder = new KStreamBuilder()
-  val aggregate: KTable[Windowed[String], String] = builder.stream("teste1")
+  val builder: KStreamBuilder               = new KStreamBuilder()
+  val streamEvents: KStream[String, String] = builder.stream("stream-events")
+  val aggregate: KTable[Windowed[String], String] = streamEvents
     .groupByKey()
-    .aggregate(i1,
-      ag1,
-      TimeWindows.of(5000),
-      new StringSerde(), "foo")
+    .aggregate(i1, aggregator, TimeWindows.of(5000), new StringSerde(), "foo")
 
-  aggregate.toStream((x, v) => )
-
-
+  aggregate.to("stream-events-agg")
 
 //  val wordCounts: KTable[String, Long] = textLines
 //    .flatMapValues(textLine => textLine.toLowerCase.split("\\W+").toIterable.asJava)
@@ -76,18 +70,17 @@ object Foo {
     kafkaProps.put("bootstrap.servers", "localhost:9092")
 
     kafkaProps.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-    2
+
     kafkaProps.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
 
     val producer = new KafkaProducer[String, String](kafkaProps)
 
     Range(0, 1000)
       .partition(_ % 2 == 0) match {
-      case (a, b) => {
+      case (a, b) =>
         val y = (x: Int) => Instant.now().toEpochMilli + (x * 200)
-        a.foreach(x => producer.send(new ProducerRecord("teste1", x % 2, y(x), "value", x.toString)))
-        b.foreach(x => producer.send(new ProducerRecord("teste1", x % 2, y(x), "value", x.toString)))
-      }
+        a.foreach(x => producer.send(new ProducerRecord("stream-events", 0, y(x), "value", x.toString.concat("-").concat(y.toString))))
+        b.foreach(x => producer.send(new ProducerRecord("stream-events", 0, y(x), "value", x.toString.concat("-").concat(y.toString))))
     }
   }
 }
