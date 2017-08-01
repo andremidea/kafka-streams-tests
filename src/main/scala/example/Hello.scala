@@ -44,24 +44,31 @@ object Hello extends Greeting with App {
   val keyMapper: KeyValueMapper[Windowed[String], String, String] = (k, v) => k.key() // we don't want to change the key
   val valueMapper: ValueMapper[String, String]                    = (v) => v
 
+  val serdeString: Serde[String] = Serdes.String()
+
   val builder: KStreamBuilder               = new KStreamBuilder()
   val streamEvents: KStream[String, String] = builder.stream("stream-events")
-  val aggregate: KTable[Windowed[String], String] = streamEvents
+  val aggregate: KTable[String, String] = streamEvents
     .groupByKey()
-    .aggregate(i1, aggregator, TimeWindows.of(5000), new StringSerde(), "foo")
-
-  aggregate.to("stream-events-agg")
+    .aggregate(i1, aggregator, serdeString, "foo")
 
 //  val wordCounts: KTable[String, Long] = textLines
 //    .flatMapValues(textLine => textLine.toLowerCase.split("\\W+").toIterable.asJava)
 //    .groupBy((_, word) => word)
 //    .count("Counts")
-//  wordCounts.to(Serdes.String(), Serdes.Long(), "WordsWithCountsTopic")
+//  wordCounts.to(Serdes.String(), Serdes.Long(), "WordsWithCountsTopic"),
+
+  aggregate.to(serdeString, serdeString, "stream-events-agg")
 
   val streams: KafkaStreams = new KafkaStreams(builder, config)
+
   streams.start()
 
+
+
   Runtime.getRuntime.addShutdownHook(new Thread(() => { streams.close(10, TimeUnit.SECONDS) }))
+
+
 }
 
 object Foo {
