@@ -30,16 +30,17 @@ class Batch {
 object Hello extends Greeting with App {
   Foo.euclidesLikesHillary
 
+  val name = "app03"
   val config: Properties = {
     val p = new Properties()
-    p.put(StreamsConfig.APPLICATION_ID_CONFIG, "wordcount-application")
+    p.put(StreamsConfig.APPLICATION_ID_CONFIG, name)
     p.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
     p.put(StreamsConfig.KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass)
     p.put(StreamsConfig.VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass)
     p
   }
 
-  val i1: Initializer[String]                                     = () => ""
+  val i1: Initializer[String]                                     = () => s"XXX>>>>>"
   val aggregator: Aggregator[String, String, String]              = (k, v, va) => va.concat(" | ").concat(v)
   val keyMapper: KeyValueMapper[Windowed[String], String, String] = (k, v) => k.key() // we don't want to change the key
   val valueMapper: ValueMapper[String, String]                    = (v) => v
@@ -48,9 +49,14 @@ object Hello extends Greeting with App {
 
   val builder: KStreamBuilder               = new KStreamBuilder()
   val streamEvents: KStream[String, String] = builder.stream("stream-events")
-  val aggregate: KTable[String, String] = streamEvents
+  val aggregate: KTable[Windowed[String], String] = streamEvents
     .groupByKey()
-    .aggregate(i1, aggregator, serdeString, "foo")
+    .aggregate(i1, aggregator, TimeWindows.of(30000), serdeString, "foo")
+
+
+  val stream: KStream[String, String] = aggregate.toStream(keyMapper)
+
+  stream.to(Serdes.String(), Serdes.String(), "stream-events-agg2")
 
 //  val wordCounts: KTable[String, Long] = textLines
 //    .flatMapValues(textLine => textLine.toLowerCase.split("\\W+").toIterable.asJava)
@@ -58,7 +64,7 @@ object Hello extends Greeting with App {
 //    .count("Counts")
 //  wordCounts.to(Serdes.String(), Serdes.Long(), "WordsWithCountsTopic"),
 
-  aggregate.to(serdeString, serdeString, "stream-events-agg")
+//  aggregate.to(serdeString, serdeString, "stream-events-agg")
 
   val streams: KafkaStreams = new KafkaStreams(builder, config)
 
@@ -82,12 +88,12 @@ object Foo {
 
     val producer = new KafkaProducer[String, String](kafkaProps)
 
-    Range(0, 1000)
+    Range(0, 10)
       .partition(_ % 2 == 0) match {
       case (a, b) =>
-        val y = (x: Int) => Instant.now().toEpochMilli + (x * 200)
-        a.foreach(x => producer.send(new ProducerRecord("stream-events", 0, y(x), "value", x.toString.concat("-").concat(y(x).toString))))
-        b.foreach(x => producer.send(new ProducerRecord("stream-events", 0, y(x), "value", x.toString.concat("-").concat(y(x).toString))))
+        val y = (x: Int) => Instant.now().toEpochMilli + (x * 2000)
+        a.foreach(x => producer.send(new ProducerRecord("stream-events",x % 2 , y(x), "value", x.toString.concat("-").concat(y(x).toString))))
+        b.foreach(x => producer.send(new ProducerRecord("stream-events", x % 2, y(x), "value", x.toString.concat("-").concat(y(x).toString))))
     }
   }
 }
