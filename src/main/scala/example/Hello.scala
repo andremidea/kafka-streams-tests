@@ -86,7 +86,7 @@ object Foo {
       .partition(_ % 2 == 0) match {
       case (a, b) =>
         val y = (x: Int) => Instant.now().toEpochMilli + (x * 200)
-        a.foreach(x => producer.send(new ProducerRecord("stream-events", 0, y(x), "value", x.toString.concat("-").concat(y(x).toString)))
+        a.foreach(x => producer.send(new ProducerRecord("stream-events", 0, y(x), "value", x.toString.concat("-").concat(y(x).toString))))
         b.foreach(x => producer.send(new ProducerRecord("stream-events", 0, y(x), "value", x.toString.concat("-").concat(y(x).toString))))
     }
   }
