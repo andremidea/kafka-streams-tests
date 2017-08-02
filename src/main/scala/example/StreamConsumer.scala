@@ -14,7 +14,7 @@ case class Message[M, T](metadata: M, payload: T)
 
 object Types {
   type MessageString = String
-  type Messages = Seq[MessageString]
+  type Messages = String
   type KVStoreType = KeyValueStore[String, Messages]
 }
 
@@ -27,6 +27,9 @@ class StreamProcessor extends Processor[String, Types.MessageString] {
 
   val MAX_FLUSH_LAG: Long = 30 // seconds
   val MAX_FLUSH_MESSAGES: Int = 30 // messages
+  val Initializer: Types.MessageString = ">>>> "
+
+  def appender(currentState: Types.Messages, value: Types.MessageString): Types.Messages = currentState.concat(" | ").concat(value)
 
   def setLastFlush(): Unit = {
     lastFlush.synchronized {
@@ -51,9 +54,9 @@ class StreamProcessor extends Processor[String, Types.MessageString] {
     println(currentMessages)
 
     if(currentMessages != null) {
-      state.put(stateKey, currentMessages :+ value)
+      state.put(stateKey, appender(currentMessages, value))
     } else {
-      state.put(stateKey, Seq(value))
+      state.put(stateKey, appender(Initializer, value))
     }
   }
 
