@@ -51,7 +51,6 @@ class StreamProcessor extends Processor[String, Types.MessageString] {
 
   override def process(key: String, value: Types.MessageString): Unit = {
     val currentMessages: Types.Messages = state.get(stateKey)
-    println(currentMessages)
 
     if(currentMessages != null) {
       state.put(stateKey, appender(currentMessages, value))
