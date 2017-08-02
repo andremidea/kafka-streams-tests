@@ -3,8 +3,6 @@ import Dependencies._
 
 resolvers ++= Seq(
   Resolver.mavenLocal,
-  "nu-maven" at "s3://nu-maven/releases/",
-  "nu-snapshots" at "s3://nu-maven/snapshots/",
   "clojars" at "http://clojars.org/repo",
   "confluent" at "http://packages.confluent.io/maven/")
 
