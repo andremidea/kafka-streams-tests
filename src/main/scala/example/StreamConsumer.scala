@@ -150,12 +150,10 @@ object Producer {
     val producer = new KafkaProducer[String, String](kafkaProps)
 
     Range(0, 1000).foreach { r =>
-      Range(r*10, (r+1)*10)
+      Range(r*20, (r+1)*20)
         .partition(_ % 2 == 0) match {
         case (a, b) =>
-          println("case")
           a.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), "key", getValue(x))))
-          println("case b")
           b.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), "key", getValue(x))))
       }
       println("Sleeping")
