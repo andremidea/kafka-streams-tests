@@ -148,11 +148,9 @@ object Producer {
     kafkaProps.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
 
     val producer = new KafkaProducer[String, String](kafkaProps)
-    def round[A](seq: Iterable[A], n: Int) = {
-      (0 until n).map(i => seq.drop(i).sliding(1, n).flatten)
-    }
-    round(Stream.from(1), 1000).foreach { x =>
-      x
+
+    Range(0, 1000).foreach { r =>
+      Range(r*10, (r+1)*10)
         .partition(_ % 2 == 0) match {
         case (a, b) =>
           println("case")
