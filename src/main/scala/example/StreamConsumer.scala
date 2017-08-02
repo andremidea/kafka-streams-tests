@@ -1,35 +1,39 @@
 package example
 
 import java.time.Instant
+import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import org.apache.avro.Schema
+import org.apache.avro.generic.GenericRecord
+import org.apache.avro.specific.SpecificRecordBuilderBase
 import org.apache.kafka.common.serialization._
 import org.apache.kafka.streams._
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.streams.processor.{Processor, ProcessorContext, ProcessorSupplier, TopologyBuilder}
 import org.apache.kafka.streams.state.{KeyValueStore, Stores}
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.util.Random
+
 case class Message[M, T](metadata: M, payload: T)
 
 object Types {
-  type MessageString = String
-  type Messages = String
-  type KVStoreType = KeyValueStore[String, Messages]
+  type Message = String
+  type KVStoreType = KeyValueStore[String, Message]
 }
 
-class StreamProcessor extends Processor[String, Types.MessageString] {
+class StreamProcessor extends Processor[String, Types.Message] {
 
   private var processor: ProcessorContext = _
   private var state: Types.KVStoreType = _
 
   private var lastFlush: Long = Instant.now().toEpochMilli
 
-  val MAX_FLUSH_LAG: Long = 30 // seconds
-  val MAX_FLUSH_MESSAGES: Int = 30 // messages
-  val Initializer: Types.MessageString = ">>>> "
-
-  def appender(currentState: Types.Messages, value: Types.MessageString): Types.Messages = currentState.concat(" | ").concat(value)
+  val MAX_FLUSH_LAG: Long = 60 // seconds
+  val MAX_FLUSH_MESSAGES: Int = 100 // messages
 
   def setLastFlush(): Unit = {
     lastFlush.synchronized {
@@ -38,7 +42,7 @@ class StreamProcessor extends Processor[String, Types.MessageString] {
   }
 
   def flushLagSeconds(): Long = {
-    (Instant.now().toEpochMilli - lastFlush)/1000
+    (Instant.now().toEpochMilli - lastFlush) / 1000
   }
 
   val stateKey: String = "messages"
@@ -49,41 +53,37 @@ class StreamProcessor extends Processor[String, Types.MessageString] {
     state = context.getStateStore("FOO").asInstanceOf[Types.KVStoreType]
   }
 
-  override def process(key: String, value: Types.MessageString): Unit = {
-    val currentMessages: Types.Messages = state.get(stateKey)
-
-    if(currentMessages != null) {
-      state.put(stateKey, appender(currentMessages, value))
-    } else {
-      state.put(stateKey, appender(Initializer, value))
-    }
+  override def process(key: String, value: Types.Message): Unit = {
+    state.put(key, value)
   }
 
-  private def flush(currentMessages: Types.Messages): Unit = {
-    processor.forward(stateKey, currentMessages)
-    state.delete(stateKey)
+  private def flush(): Unit = {
+    val x = state.all()
+    val messages = x.asScala.toSeq.map(x => AvroThings.Fufuzer(x.key))
+    val y = AvroThings.getBAOS(messages)
+
+    processor.forward(Random.nextInt().toString, y)
     setLastFlush()
     processor.commit()
+    x.asScala.foreach(x => state.delete(x.key))
   }
 
   override def punctuate(timestamp: Long): Unit = {
-    val currentMessages: Types.Messages = state.get(stateKey)
-
-    if (currentMessages != null) {
-      print(currentMessages.size)
-      if(currentMessages.size > MAX_FLUSH_MESSAGES) {
-        println("Flushing for SIZE")
-        flush(currentMessages)
-      }
-      else if (flushLagSeconds > MAX_FLUSH_LAG) {
-        println("Flushing for TIME")
-        flush(currentMessages)
-      }
+    if (state.approximateNumEntries() > MAX_FLUSH_MESSAGES) {
+      println("Flushing for SIZE")
+      flush()
+    }
+    else if (flushLagSeconds > MAX_FLUSH_LAG) {
+      println("Flushing for TIME")
+      flush()
     }
   }
 
+
   override def close(): Unit = {}
 }
+
+
 
 object StreamConsumer extends App {
 
@@ -100,7 +100,8 @@ object StreamConsumer extends App {
     p
   }
 
-  val proc: ProcessorSupplier[String, Types.MessageString] = () => new StreamProcessor()
+  val proc: ProcessorSupplier[String, Types.Message] = () => new StreamProcessor()
+  val writter: ProcessorSupplier[String, Array[Byte]] = () => new StreamWriter()
 
   val store = Stores.create("FOO")
     .withKeys(Serdes.String())
@@ -112,7 +113,7 @@ object StreamConsumer extends App {
   builder
     .addSource("SOURCE", "stream-events")
     .addProcessor("AGGREGATE", proc, "SOURCE")
-    .addSink("SINK", TO_TOPIC, "AGGREGATE")
+    .addProcessor("WRITER", writter, "AGGREGATE")
     .addStateStore(store, "AGGREGATE")
     .connectProcessorAndStateStores("AGGREGATE", "FOO")
 
@@ -133,9 +134,7 @@ object Producer {
   def getTimestamp(x: Int): Long = Instant.now().toEpochMilli + (x * 2000)
 
   def getValue(x: Int): String = {
-    val timestamp = Instant.ofEpochMilli(getTimestamp(x)).toString
-    val value = x.toString
-    timestamp.concat(": ").concat(value)
+    x.toString
   }
 
   def produce(): Unit = {
@@ -153,8 +152,8 @@ object Producer {
       Range(r*20, (r+1)*20)
         .partition(_ % 2 == 0) match {
         case (a, b) =>
-          a.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), "key", getValue(x))))
-          b.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), "key", getValue(x))))
+          a.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), getTimestamp(x).toString, getValue(x))))
+          b.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), getTimestamp(x).toString, getValue(x))))
       }
       println("Sleeping")
       Thread.sleep(5000)
