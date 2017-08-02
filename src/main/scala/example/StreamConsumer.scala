@@ -1,5 +1,7 @@
 package example
 
+import math.random
+
 import java.time.Instant
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -26,7 +28,7 @@ class StreamProcessor extends Processor[String, Types.MessageString] {
   private var lastFlush: Long = Instant.now().toEpochMilli
 
   val MAX_FLUSH_LAG: Long = 30 // seconds
-  val MAX_FLUSH_MESSAGES: Int = 30 // messages
+  val MAX_FLUSH_MESSAGES: Int = 5000 // messages
   val Initializer: Types.MessageString = ">>>> "
 
   def appender(currentState: Types.Messages, value: Types.MessageString): Types.Messages = currentState.concat(" | ").concat(value)
@@ -70,7 +72,7 @@ class StreamProcessor extends Processor[String, Types.MessageString] {
     val currentMessages: Types.Messages = state.get(stateKey)
 
     if (currentMessages != null) {
-      print(currentMessages.size)
+      print(s"${currentMessages.size} ")
       if(currentMessages.size > MAX_FLUSH_MESSAGES) {
         println("Flushing for SIZE")
         flush(currentMessages)
@@ -156,8 +158,9 @@ object Producer {
           a.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), "key", getValue(x))))
           b.foreach(x => producer.send(new ProducerRecord(TO_TOPIC, x % 2, getTimestamp(x), "key", getValue(x))))
       }
-      println("Sleeping")
-      Thread.sleep(5000)
+      val sleepTime: Int = (random*6000).toInt
+      println(s"Sleeping $sleepTime")
+      Thread.sleep(sleepTime)
     }
   }
 }
