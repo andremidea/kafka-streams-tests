@@ -9,18 +9,20 @@ import scala.math.random
 
 object StreamProducer {
 
+  val startTime: Long = Instant.now().toEpochMilli
+
   val TO_TOPIC: String = "stream-events"
 
-  def getTimestamp(x: Int): Long = Instant.now().toEpochMilli + (x * 2000)
+  def getTimestamp(x: Int): Long = Instant.now().toEpochMilli + (x * 200)
 
   def getValue(x: Int): String = {
     x.toString
   }
 
   def getRecord(x: Int): ProducerRecord[String, Array[Byte]] = {
-    val ts = getTimestamp(x)
-    val k = ts.toString
-    val v = AvroThings.getBAOS(Seq(new InputMessage(ts, getValue(x), -1)))
+    val ts     = getTimestamp(x)
+    val k      = ts.toString
+    val v      = AvroThings.getBAOS(Seq(InputMessage((ts - startTime).toString, getValue(x), s"P:${x % 2}", ts)))
     val record = new ProducerRecord(TO_TOPIC, x % 2, ts, k, v)
     record
   }
@@ -38,7 +40,7 @@ object StreamProducer {
     val producer = new KafkaProducer[String, Array[Byte]](kafkaProps)
 
     Range(0, 1000).foreach { r =>
-      Range(r * 20, (r + 1) * 20)
+      Range(r * 12, (r + 1) * 12)
         .partition(_ % 2 == 0) match {
         case (a, b) =>
           a.foreach(x => producer.send(getRecord(x)))

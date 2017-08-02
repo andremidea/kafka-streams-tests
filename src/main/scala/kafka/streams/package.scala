@@ -6,10 +6,9 @@ import org.apache.kafka.streams.state.KeyValueStore
 
 package object streams {
 
-  case class Message[K, T](key: K, payload: T, consumedAt: Long = Instant.now().toEpochMilli)
-  type OutputMessage = Message[String, InputMessage]
+  case class InputMessage(key: String, value: String, partition: String, producedAt: Long)
+  case class OutputMessage(batchId: String, inputMessage: InputMessage, consumedAt: Long = Instant.now().toEpochMilli)
 
-  type InputMessage = Message[Long, String]
   type KVStoreType  = KeyValueStore[String, Array[Byte]]
 
 }

@@ -10,6 +10,7 @@ import org.apache.kafka.streams.processor.{Processor, ProcessorContext, Processo
 import org.apache.kafka.streams.state.Stores
 
 import scala.collection.JavaConverters._
+import scala.math.random
 import scala.util.Random
 
 class StreamProcessor extends Processor[String, Array[Byte]] {
@@ -19,8 +20,8 @@ class StreamProcessor extends Processor[String, Array[Byte]] {
 
   private var lastFlush: Long = Instant.now().toEpochMilli
 
-  val MAX_FLUSH_LAG: Long     = 8  // seconds
-  val MAX_FLUSH_MESSAGES: Int = 50 // messages
+  val MAX_FLUSH_LAG: Long     = 5  // seconds
+  val MAX_FLUSH_MESSAGES: Int = 20 // messages
 
   def setLastFlush(): Unit = {
     lastFlush.synchronized {
@@ -31,8 +32,6 @@ class StreamProcessor extends Processor[String, Array[Byte]] {
   def flushLagSeconds(): Long = {
     (Instant.now().toEpochMilli - lastFlush) / 1000
   }
-
-  val stateKey: String = "messages"
 
   override def init(context: ProcessorContext): Unit = {
     processor = context
@@ -45,15 +44,15 @@ class StreamProcessor extends Processor[String, Array[Byte]] {
   }
 
   private def flush(): Unit = {
-    val allState        = state.all().asScala.toSeq
+    val batchId = s"B:${(random * 4000).toInt}"
+    val allState = state.all().asScala.toSeq
     println(s"allState ${allState.size}")
     val messages: Seq[OutputMessage] =
-      allState.flatMap(x => AvroThings.getResultFromBA[InputMessage](x.value).map(value => new OutputMessage(x.key, value)))
-    println(s"messages ${messages.size}")
-    println(messages.head)
-    val baos        = AvroThings.getBAOS(messages)
+      allState.flatMap(x =>
+        AvroThings.getResultFromBA[InputMessage](x.value).map(value => OutputMessage(batchId, value)))
+    val baos = AvroThings.getBAOS(messages)
 
-    processor.forward(Random.nextInt().toString, baos)
+    processor.forward(batchId, baos)
     setLastFlush()
     processor.commit()
     allState.foreach(x => state.delete(x.key))
@@ -74,10 +73,10 @@ class StreamProcessor extends Processor[String, Array[Byte]] {
 
 class StreamConsumer {
 
-  val name = "app-stream-01"
+  val name = "app-stream-02"
 
   val FROM_TOPIC: String = StreamProducer.TO_TOPIC
-  val TO_TOPIC: String = "stream-events-agg"
+  val TO_TOPIC: String   = "stream-events-agg"
 
   val config: Properties = {
     val p = new Properties()
@@ -88,7 +87,7 @@ class StreamConsumer {
     p
   }
 
-  val proc: ProcessorSupplier[String, Array[Byte]]   = () => new StreamProcessor()
+  val proc: ProcessorSupplier[String, Array[Byte]]    = () => new StreamProcessor()
   val writter: ProcessorSupplier[String, Array[Byte]] = () => new StreamWriter()
 
   private val store = Stores
@@ -106,7 +105,6 @@ class StreamConsumer {
     .addSink("SINK", TO_TOPIC, Serdes.String().serializer(), Serdes.ByteArray().serializer(), "PROCESSOR")
     .addStateStore(store, "PROCESSOR")
     .connectProcessorAndStateStores("PROCESSOR", "STORE")
-
 
   val streams: KafkaStreams = new KafkaStreams(builder, config)
 
