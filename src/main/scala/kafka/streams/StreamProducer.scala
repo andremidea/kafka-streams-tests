@@ -1,7 +1,7 @@
 package kafka.streams
 
 import java.time.Instant
-import java.util.Properties
+import java.util.{Properties, UUID}
 
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 
@@ -19,12 +19,13 @@ object StreamProducer {
     x.toString
   }
 
-  def getRecord(x: Int): ProducerRecord[String, Array[Byte]] = {
-    val ts     = getTimestamp(x)
-    val k      = ts.toString
-    val v      = AvroThings.getBAOS(Seq(InputMessage((ts - startTime).toString, getValue(x), s"P:${x % 2}", ts)))
-    val record = new ProducerRecord(TO_TOPIC, x % 2, ts, k, v)
-    record
+  def getRecord(x: Int): (ProducerRecord[String, Array[Byte]], InputMessage) = {
+    val ts           = getTimestamp(x)
+    val k            = UUID.randomUUID().toString
+    val inputMessage = InputMessage(k, getValue(x), s"P:${x % 2}", ts)
+    val v            = AvroThings.getBAOS(Seq(inputMessage))
+    val record       = new ProducerRecord(TO_TOPIC, x % 2, ts, k, v)
+    (record, inputMessage)
   }
 
   def produce(): Unit = {
@@ -43,8 +44,11 @@ object StreamProducer {
       Range(r * 12, (r + 1) * 12)
         .partition(_ % 2 == 0) match {
         case (a, b) =>
-          a.foreach(x => producer.send(getRecord(x)))
-          b.foreach(x => producer.send(getRecord(x)))
+          val records = a.map(x => getRecord(x)) ++ b.map(x => getRecord(x))
+          records.foreach(x => producer.send(x._1))
+          val inputMessages: Seq[InputMessage] = records.map(_._2)
+          val baos = AvroThings.getBAOS(inputMessages)
+          AvroThings.writeAvroInputMessage(baos, "input")
       }
       val sleepTime: Int = (random * 4000).toInt
       println(s"Sleeping $sleepTime")

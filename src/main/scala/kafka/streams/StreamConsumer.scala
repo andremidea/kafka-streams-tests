@@ -11,7 +11,6 @@ import org.apache.kafka.streams.state.Stores
 
 import scala.collection.JavaConverters._
 import scala.math.random
-import scala.util.Random
 
 class StreamProcessor extends Processor[String, Array[Byte]] {
 
@@ -44,7 +43,7 @@ class StreamProcessor extends Processor[String, Array[Byte]] {
   }
 
   private def flush(): Unit = {
-    val batchId = s"B:${(random * 4000).toInt}"
+    val batchId  = s"B:${(random * 4000).toInt}"
     val allState = state.all().asScala.toSeq
     println(s"allState ${allState.size}")
     val messages: Seq[OutputMessage] =
@@ -62,7 +61,7 @@ class StreamProcessor extends Processor[String, Array[Byte]] {
     if (state.approximateNumEntries() > MAX_FLUSH_MESSAGES) {
       println("Flushing for SIZE")
       flush()
-    } else if (flushLagSeconds > MAX_FLUSH_LAG) {
+    } else if (flushLagSeconds > MAX_FLUSH_LAG && state.approximateNumEntries() > 0) {
       println("Flushing for TIME")
       flush()
     }

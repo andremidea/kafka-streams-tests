@@ -14,7 +14,7 @@ class StreamWriter extends Processor[String, Array[Byte]] {
 
   override def process(key: String, value: Array[Byte]): Unit = {
     AvroThings.printBytesOutputMessage(value)
-    AvroThings.writeAvroOutputMessage(value)
+    AvroThings.writeAvroOutputMessage(value, "output")
     processor.commit()
 
   }

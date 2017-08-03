@@ -31,12 +31,12 @@ object AvroThings {
     result.foreach(x => print(s"$x "))
   }
 
-  def writeAvro[T: SchemaFor : FromRecord : ToRecord : TypeTag](bytes: Array[Byte]): Unit = {
+  def writeAvro[T: SchemaFor : FromRecord : ToRecord : TypeTag](bytes: Array[Byte], prefix: String): Unit = {
     val input = getResultFromBA[T](bytes).toSeq
     val uuid = UUID.randomUUID()
     val t = implicitly[TypeTag[T]].tpe
     val name = t.toString
-    val os = AvroOutputStream.data[T](new File(s"output/${name}_${uuid}.avro"))
+    val os = AvroOutputStream.data[T](new File(s"$prefix/${name}_$uuid.avro"))
     os.write(input)
     os.flush()
     os.close()
@@ -47,6 +47,8 @@ object AvroThings {
 
   //def getResultFromBA: (Array[Byte]) => Unit = getResultFromBA[InputMessage]
   def printBytesOutputMessage: (Array[Byte]) => Unit = printBytes[OutputMessage]
-  def writeAvroOutputMessage: (Array[Byte]) => Unit = writeAvro[OutputMessage]
+
+  def writeAvroInputMessage: (Array[Byte], String) => Unit = writeAvro[InputMessage]
+  def writeAvroOutputMessage: (Array[Byte], String) => Unit = writeAvro[OutputMessage]
 
 }
